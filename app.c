@@ -46,18 +46,20 @@ static uint8 ota_in_progress = 0;
 static uint8 ota_image_finished = 0;
 static uint16 ota_time_elapsed = 0;
 
-static int32_t get_slot_info()
+static int32_t boot_slot = 1;
+
+static int32_t get_slot_info(int32_t slotId)
 {
 	int32_t err;
 
 	bootloader_getInfo(&bldInfo);
 	printf("Gecko bootloader version: %u.%u\r\n", (bldInfo.version & 0xFF000000) >> 24, (bldInfo.version & 0x00FF0000) >> 16);
 
-	err = bootloader_getStorageSlotInfo(1, &slotInfo);
+	err = bootloader_getStorageSlotInfo(slotId, &slotInfo);
 
 	if(err == BOOTLOADER_OK)
 	{
-		printf("Slot 0 starts @ 0x%8.8x, size %u bytes\r\n", slotInfo.address, slotInfo.length);
+		printf("Slot %d starts @ 0x%8.8x, size %u bytes\r\n",slotId, slotInfo.address, slotInfo.length);
 	}
 	else
 	{
@@ -67,7 +69,7 @@ static int32_t get_slot_info()
 	return(err);
 }
 
-static void erase_slot_if_needed()
+static void erase_slot_if_needed(int32_t slotId)
 {
 	uint32_t offset = 0;
 	uint8_t buffer[256];
@@ -82,7 +84,7 @@ static void erase_slot_if_needed()
 
 	while((dirty == 0) && (offset < 256*num_blocks) && (err == BOOTLOADER_OK))
 	{
-		err = bootloader_readStorage(0, offset, buffer, 256);
+		err = bootloader_readStorage(slotId, offset, buffer, 256);
 		if(err == BOOTLOADER_OK)
 		{
 			i=0;
@@ -106,7 +108,7 @@ static void erase_slot_if_needed()
 	else if(dirty)
 	{
 		printf("download area is not empty, erasing...\r\n");
-		bootloader_eraseStorageSlot(0);
+		bootloader_eraseStorageSlot(slotId);
 		printf("done\r\n");
 	}
 	else
@@ -178,10 +180,10 @@ void appMain(gecko_configuration_t *pconfig)
 	        bootloader_init();
 
 	        /* read slot information from bootloader */
-	        if(get_slot_info() == BOOTLOADER_OK)
+	        if(get_slot_info(boot_slot) == BOOTLOADER_OK)
 	        {
 	        	/* the download area is erased here (if needed), prior to any connections are opened */
-	        	erase_slot_if_needed();
+	        	erase_slot_if_needed(boot_slot);
 	        }
 	        else
 	        {
@@ -201,7 +203,7 @@ void appMain(gecko_configuration_t *pconfig)
 #if DEBUG_LEVEL
 	    		  uart_flush();
 #endif
-	    		  bootloader_setImageToBootload(0);
+	    		  bootloader_setImageToBootload(boot_slot);
 	    		  bootloader_rebootAndInstall();
 	    	  } else {
 	    		  /* Restart advertising after client has disconnected */
@@ -246,7 +248,7 @@ void appMain(gecko_configuration_t *pconfig)
 	    	  {
 	    		  if(ota_in_progress)
 	    		  {
-	    			  bootloader_writeStorage(0,//use slot 0
+	    			  bootloader_writeStorage(boot_slot,//use slot 0
 	    					  ota_image_position,
 							  evt->data.evt_gatt_server_user_write_request.value.data,
 							  evt->data.evt_gatt_server_user_write_request.value.len);
